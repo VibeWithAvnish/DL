@@ -1,0 +1,104 @@
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
+from tensorflow.keras.callbacks import EarlyStopping
+
+# Set paths to the training and testing directories
+train_dir = r"C:\Avnish\desktop_new\Sem 7\z_DL_Dataset\brain tumour\Training"
+test_dir = r"C:\Avnish\desktop_new\Sem 7\z_DL_Dataset\brain tumour\Testing"
+
+# Image data generator for augmenting images
+train_datagen = ImageDataGenerator(
+    rescale=1.0/255,
+    rotation_range=30,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    vertical_flip=True,  
+    fill_mode='nearest',
+    validation_split=0.2  # Added to enable validation split
+)
+
+# Test data generator
+test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# Loading training data and validation data from directories
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='sparse',
+    subset='training'  # Use training subset
+)
+
+val_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='sparse',
+    subset='validation'  # Use validation subset
+)
+
+# Loading testing data
+test_generator = test_datagen.flow_from_directory(
+    test_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='sparse'
+)
+
+# CNN Model Architecture
+model = models.Sequential([
+    layers.Conv2D(32, (3,3), activation='relu', input_shape=(150, 150, 3)),
+    layers.MaxPooling2D(2, 2),
+    layers.Conv2D(64, (3,3), activation='relu'),
+    layers.MaxPooling2D(2, 2),
+    layers.Conv2D(128, (3,3), activation='relu'),
+    layers.MaxPooling2D(2, 2),
+    layers.Flatten(),
+    layers.Dense(256, activation='relu'),  # Reduced dense units
+    layers.Dropout(0.5),                   # Dropout to reduce overfitting
+    layers.Dense(4, activation='softmax')
+])
+
+# Compile the model
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+
+# Early stopping callback
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+# Train the model
+history = model.fit(
+    train_generator,
+    validation_data=val_generator,
+    epochs=10,
+    callbacks=[early_stopping]
+)
+
+# Plotting accuracy and loss
+plt.figure(figsize=(12, 5))
+
+# Plot accuracy
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# Plot loss
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.show()
