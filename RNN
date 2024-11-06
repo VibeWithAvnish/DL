@@ -1,0 +1,133 @@
+import numpy as np
+import matplotlib.pyplot as plt
+Dataset Creation
+def create_dataset():
+data = "hello world hello world hello world"
+chars = list(set(data))
+char_to_idx = {ch: i for i, ch in enumerate(chars)}
+idx_to_char = {i: ch for i, ch in enumerate(chars)}
+# Prepare training data
+X = [] # Input sequences
+y = [] # Target sequences
+for i in range(len(data) - 1):
+input_char = np.zeros((len(chars)))
+input_char[char_to_idx[data[i]]] = 1
+target_char = np.zeros((len(chars)))
+target_char[char_to_idx[data[i + 1]]] = 1
+X.append(input_char)
+y.append(target_char)
+return np.array(X), np.array(y), char_to_idx, idx_to_char, data
+Model Parameters
+class SimpleRNN:
+def __init__(self, input_size, hidden_size, output_size, learning_rate=0.01):
+# Initialize weights
+self.Wxh = np.random.randn(hidden_size, input_size) * 0.01 # Input to hidden
+self.Whh = np.random.randn(hidden_size, hidden_size) * 0.01 # Hidden to hidden
+self.Why = np.random.randn(output_size, hidden_size) * 0.01 # Hidden to output
+# Initialize biases
+self.bh = np.zeros((hidden_size, 1)) # Hidden bias
+self.by = np.zeros((output_size, 1)) # Output bias
+self.learning_rate = learning_rate
+def sigmoid(self, x):
+return 1 / (1 + np.exp(-x))
+def tanh(self, x):
+return np.tanh(x)
+def tanh_derivative(self, x):
+return 1 - np.tanh(x)**2
+def forward(self, inputs):
+# Initialize lists to store states
+self.hidden_states = []
+self.outputs = []
+h_prev = np.zeros((self.Whh.shape[0], 1)) # Initial hidden state
+# Forward pass for each time step
+for x in inputs:
+# Convert input to column vector
+x = x.reshape(-1, 1)
+# Calculate hidden state
+h = self.tanh(np.dot(self.Wxh, x) + np.dot(self.Whh, h_prev) + self.bh)
+# Calculate output
+y = self.sigmoid(np.dot(self.Why, h) + self.by)
+# Store states for backpropagation
+self.hidden_states.append(h)
+self.outputs.append(y)
+h_prev = h
+return self.outputs
+def backward(self, inputs, targets, outputs, hidden_states):
+# Initialize gradients
+dWxh = np.zeros_like(self.Wxh)
+dWhh = np.zeros_like(self.Whh)
+dWhy = np.zeros_like(self.Why)
+dbh = np.zeros_like(self.bh)
+dby = np.zeros_like(self.by)
+dh_next = np.zeros_like(hidden_states[0])
+# Backpropagate through time
+for t in reversed(range(len(outputs))):
+dy = outputs[t] - targets[t].reshape(-1, 1)
+# Gradients for Why and by
+dWhy += np.dot(dy, hidden_states[t].T)
+dby += dy
+# Gradient for hidden state
+dh = np.dot(self.Why.T, dy) + dh_next
+# Gradient through tanh
+dh_raw = self.tanh_derivative(hidden_states[t]) * dh
+dbh += dh_raw
+dWxh += np.dot(dh_raw, inputs[t].reshape(1, -1))
+dWhh += np.dot(dh_raw, hidden_states[t-1].T) if t > 0 else np.dot(dh_raw, np.zeros_like(hidden_states[0]).T)
+dh_next = np.dot(self.Whh.T, dh_raw)
+# Clip gradients to prevent exploding gradients
+for dparam in [dWxh, dWhh, dWhy, dbh, dby]:
+np.clip(dparam, -5, 5, out=dparam)
+# Update weights and biases
+self.Wxh -= self.learning_rate * dWxh
+self.Whh -= self.learning_rate * dWhh
+self.Why -= self.learning_rate * dWhy
+self.bh -= self.learning_rate * dbh
+self.by -= self.learning_rate * dby
+Training and History
+def train_and_demonstrate():
+# Create dataset
+X, y, char_to_idx, idx_to_char, original_data = create_dataset()
+# Initialize RNN
+input_size = len(char_to_idx)
+hidden_size = 50
+output_size = len(char_to_idx)
+rnn = SimpleRNN(input_size, hidden_size, output_size)
+# Training loop
+epochs = 100
+losses = []
+print("Training the RNN...")
+print("Original sequence:", original_data)
+print("\nTraining Progress:")
+for epoch in range(epochs):
+# Forward pass
+outputs = rnn.forward(X)
+# Calculate loss (mean squared error)
+loss = np.mean([(output - target.reshape(-1, 1))**2 for output, target in zip(outputs, y)])
+losses.append(loss)
+# Backward pass
+rnn.backward(X, y, outputs, rnn.hidden_states)
+if epoch % 20 == 0 or epoch == epochs - 1:
+print(f'Epoch {epoch}, Loss: {loss:.4f}')
+Demonstration and Visualization
+print("\nDemonstrating predictions for each character in sequence:")
+for i in range(len(original_data) - 1):
+input_char = original_data[i]
+actual_next_char = original_data[i + 1]
+# Prepare input
+input_vector = np.zeros((len(char_to_idx)))
+input_vector[char_to_idx[input_char]] = 1
+# Get prediction
+output = rnn.forward([input_vector])[0]
+predicted_char = idx_to_char[np.argmax(output)]
+print(f"Input: '{input_char}' → Predicted next: '{predicted_char}' (Actual: '{actual_next_char}')")
+# Plot training loss
+plt.figure(figsize=(10, 5))
+plt.plot(losses)
+plt.title('Training Loss over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.grid(True)
+plt.show()
+return rnn, char_to_idx, idx_to_char
+Run the Demonstration
+rnn, char_to_idx, idx_to_char = train_and_demonstrate()
