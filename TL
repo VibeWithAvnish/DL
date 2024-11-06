@@ -1,0 +1,94 @@
+# Install required libraries
+!pip install tensorflow
+
+# Import required libraries
+import tensorflow as tf
+from tensorflow.keras.preprocessing import image_dataset_from_directory
+from tensorflow.keras import layers, models
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Define directory paths (update these paths to your actual dataset directories)
+train_dir = "path/to/train"
+val_dir = "path/to/val"
+test_dir = "path/to/test"
+
+# Define parameters
+img_size = (224, 224)  # MobileNetV2 expects 224x224 images
+batch_size = 32
+
+# Load datasets
+train_dataset = image_dataset_from_directory(train_dir, image_size=img_size, batch_size=batch_size)
+val_dataset = image_dataset_from_directory(val_dir, image_size=img_size, batch_size=batch_size)
+test_dataset = image_dataset_from_directory(test_dir, image_size=img_size, batch_size=batch_size)
+
+# Check class names in dataset
+class_names = train_dataset.class_names
+num_classes = len(class_names)
+
+# Load the base model (MobileNetV2) with pre-trained weights
+base_model = tf.keras.applications.MobileNetV2(input_shape=(224, 224, 3),
+                                                include_top=False,
+                                                weights='imagenet')
+base_model.trainable = False  # Freeze the base model layers
+
+# Build the model
+model = models.Sequential([
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(128, activation='relu'),  # Add a fully connected layer
+    layers.Dense(num_classes, activation='softmax')  # Multi-class output layer
+])
+
+# Compile the model
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy',  # Suitable for multi-class classification
+              metrics=['accuracy'])
+
+# Model summary
+model.summary()
+
+# Train the model
+epochs = 10
+history = model.fit(train_dataset, validation_data=val_dataset, epochs=epochs)
+
+# Evaluate the model on the test dataset
+test_loss, test_accuracy = model.evaluate(test_dataset)
+print(f"Test Accuracy: {test_accuracy * 100:.2f}%")
+print(f"Test Loss: {test_loss:.4f}")
+
+# Function for predicting and displaying an image with prediction
+def predict_and_display(model, img_path):
+    img = tf.keras.preprocessing.image.load_img(img_path, target_size=img_size)
+    img_array = tf.keras.preprocessing.image.img_to_array(img)
+    img_array = tf.expand_dims(img_array, 0)  # Create a batch
+    prediction = model.predict(img_array)
+    class_index = np.argmax(prediction)  # Get the index of the highest probability
+    class_name = class_names[class_index]  # Get the class name using the index
+    plt.imshow(img)
+    plt.title(f"Prediction: {class_name}")
+    plt.axis('off')
+    plt.show()
+
+# Test the function with an example image
+predict_and_display(model, "path/to/some_test_image.jpg")
+
+# Plot training & validation accuracy values
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Train')
+plt.plot(history.history['val_accuracy'], label='Validation')
+plt.title('Model Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend(loc='lower right')
+
+# Plot training & validation loss values
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Train')
+plt.plot(history.history['val_loss'], label='Validation')
+plt.title('Model Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend(loc='upper right')
+plt.show()
