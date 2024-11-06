@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+
+# Load the dataset
+data = pd.read_csv(r"C:\Avnish\desktop_new\Sem 7\z_DL_Dataset\creditcard.csv")
+
+# Separate features and labels
+X = data.drop('Class', axis=1)
+y = data['Class']
+
+# Normalize the feature data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Split into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+# Filter normal transactions (Class == 0) for training
+X_train_normal = X_train[y_train == 0]
+print(f"Number of normal transactions in training set: {X_train_normal.shape[0]}")
+
+# Define the Autoencoder model
+input_dim = X_train_normal.shape[1]
+autoencoder = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(input_dim,)),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(8, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(input_dim, activation='sigmoid')
+])
+
+autoencoder.compile(optimizer='adam', loss='mse')
+
+# Train the autoencoder on normal transactions
+history = autoencoder.fit(X_train_normal, X_train_normal,
+                          epochs=50,
+                          batch_size=256,
+                          validation_data=(X_test, X_test),
+                          shuffle=True)
+
+# Visualize training and validation losses
+plt.figure(figsize=(10, 6))
+plt.plot(history.history['loss'], label='Train Loss', color='blue')
+plt.plot(history.history['val_loss'], label='Validation Loss', color='orange')
+plt.title('Training vs Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Calculate reconstruction error on the test set
+X_test_predictions = autoencoder.predict(X_test)
+mse = np.mean(np.square(X_test - X_test_predictions), axis=1)
+
+# Set a threshold for anomaly detection (95th percentile of MSE on normal transactions)
+threshold = np.percentile(mse[y_test == 0], 95)
+print(f"Threshold for anomaly detection: {threshold}")
+
+# Classify anomalies
+y_pred = (mse > threshold).astype(int)
+
+# Evaluate the model
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+# Confusion Matrix Visualization
+conf_matrix = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Normal', 'Fraud'], yticklabels=['Normal', 'Fraud'])
+plt.title('Confusion Matrix')
+plt.ylabel('True class')
+plt.xlabel('Predicted class')
+plt.show()
+
+# Visualization of reconstruction error distribution
+plt.figure(figsize=(10, 6))
+plt.hist(mse[y_test == 0], bins=50, alpha=0.6, label='Normal')
+plt.hist(mse[y_test == 1], bins=50, alpha=0.6, label='Fraud')
+plt.axvline(threshold, color='r', linestyle='--', label='Threshold')
+plt.title("Reconstruction Error Distribution")
+plt.xlabel("Reconstruction Error")
+plt.ylabel("Frequency")
+plt.legend()
+plt.show()
+
+# Show reconstruction error and prediction for a few samples
+sample_indices = [0, 1, 2, 3, 4]  # Choose some random test indices for demonstration
+for index in sample_indices:
+    sample = X_test[index]
+    reconstruction = autoencoder.predict(sample.reshape(1, -1))
+    error = np.mean(np.square(sample - reconstruction))
+    prediction = "Fraud" if error > threshold else "Normal"
+    print(f"Sample {index}:")
+    print(f"  Reconstruction Error: {error}")
+    print(f"  Prediction: {prediction} (Threshold: {threshold})")
