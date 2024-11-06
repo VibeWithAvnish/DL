@@ -1,0 +1,91 @@
+import tensorflow as tf
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+from object_detection.utils import label_map_util
+from object_detection.utils import visualization_utils as vis_util
+from object_detection.utils import config_util
+from object_detection.protos import pipeline_pb2
+from google.protobuf import text_format
+
+# Step 1: Load the Flower Dataset with Annotations
+def parse_annotation_file(annotation_path):
+    # This is a placeholder function; implement the parsing logic for your annotation format
+    return {
+        'boxes': [(50, 50, 150, 150)],  # Example bounding box
+        'class': ['flower']              # Example class
+    }
+
+def load_image_and_annotations(image_path, annotation_path):
+    # Load the image
+    image_np = np.array(tf.image.decode_jpeg(tf.io.read_file(image_path)))
+    # Load the annotations
+    annotations = parse_annotation_file(annotation_path)
+    return image_np, annotations
+
+# Step 2: Load a Pre-trained Object Detection Model
+def load_model(model_name):
+    base_url = 'http://download.tensorflow.org/models/'
+    model_dir = tf.keras.utils.get_file(
+        fname=model_name,
+        origin=base_url + model_name + '.tar.gz',
+        untar=True)
+    model_dir = str(model_dir) + "/saved_model"
+    model = tf.saved_model.load(model_dir)
+    return model
+
+# Load the model (Faster R-CNN in this example)
+model_name = 'faster_rcnn_inception_v2_coco_2017_11_17'  # Choose a model
+detection_model = load_model(model_name)
+
+# Step 3: Preprocess the Input Data
+def preprocess_image(image):
+    # Resize and normalize the image for the model
+    image_resized = tf.image.resize(image, (300, 300))
+    image_resized = image_resized / 255.0  # Normalize to [0, 1]
+    return image_resized
+
+# Step 4: Run Inference and Visualize Results
+def run_inference_for_single_image(model, image):
+    input_tensor = tf.convert_to_tensor(image)
+    input_tensor = input_tensor[tf.newaxis, ...]
+    # Run inference
+    output_dict = model(input_tensor)
+    # All outputs are batches
+    output_dict = {key:value.numpy() for key,value in output_dict.items()}
+    output_dict['num_detections'] = int(output_dict.pop('num_detections'))
+    output_dict['detection_classes'] = output_dict['detection_classes'][0].astype(np.int64)
+    output_dict['detection_boxes'] = output_dict['detection_boxes'][0]
+    output_dict['detection_scores'] = output_dict['detection_scores'][0]
+    return output_dict
+
+def visualize_detection(image_np, output_dict, min_score_thresh=0.5):
+    # Visualize the results of detection
+    vis_util.visualize_boxes_and_labels_on_image_array(
+        image_np,
+        output_dict['detection_boxes'],
+        output_dict['detection_classes'],
+        output_dict['detection_scores'],
+        category_index,
+        instance_masks=output_dict.get('detection_masks_reframed', None),
+        use_normalized_coordinates=True,
+        line_thickness=8,
+        min_score_thresh=min_score_thresh)
+
+# Load the label map
+category_index = label_map_util.create_category_index_from_labelmap('path/to/label_map.pbtxt', use_display_name=True)
+
+# Example usage
+image_path = 'path/to/flower_image.jpg'  # Path to your image
+annotation_path = 'path/to/annotation_file.json'  # Path to your annotation file
+
+image_np, annotations = load_image_and_annotations(image_path, annotation_path)
+image_np = preprocess_image(image_np)
+output_dict = run_inference_for_single_image(detection_model, image_np)
+visualize_detection(image_np, output_dict)
+
+# Display the image with detected objects
+plt.figure(figsize=(12, 8))
+plt.imshow(image_np)
+plt.axis('off')
+plt.show()
